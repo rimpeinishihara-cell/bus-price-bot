@@ -11,7 +11,7 @@
 - 特定の便・特定の日を登録しておくと、その便の価格が変わったときに
   「◯円→◯円」と、これまでの価格推移(日時つき)を通知
 - Discordの決まったチャンネルにコマンドを打つと、最大5分以内に反応します
-  (スラッシュコマンドではなく `!list` のような文字コマンドです)
+  (スラッシュコマンドではなく `!watch` のような文字コマンドです)
 
 ## 全体の仕組み(なんとなくでOK)
 
@@ -74,7 +74,7 @@ GitHubには「Actions」という、決まった時間に自動でプログラ�
 - `#bus-price-log`… 最安値が変わった時の通知用
 - `#bus-top5`     … 安い日TOP5用
 
-(指定便の通知は `#bus-command` に届きます。別チャンネルにしたい場合は
+(指定日の通知は `#bus-command` に届きます。別チャンネルにしたい場合は
 STEP 7 で `WATCH_NOTIFY_CHANNEL_ID` を設定してください)
 
 ### チャンネルIDの確認方法
@@ -106,7 +106,7 @@ STEP 7 で `WATCH_NOTIFY_CHANNEL_ID` を設定してください)
 | `COMMAND_CHANNEL_ID` | `#bus-command` のチャンネルID |
 | `PRICE_LOG_CHANNEL_ID` | `#bus-price-log` のチャンネルID |
 | `TOP5_CHANNEL_ID` | `#bus-top5` のチャンネルID |
-| `WATCH_NOTIFY_CHANNEL_ID`(任意) | 指定便通知を別チャンネルにしたい場合のみ設定 |
+| `WATCH_NOTIFY_CHANNEL_ID`(任意) | 指定日の通知を別チャンネルにしたい場合のみ設定 |
 
 ## STEP 8. 動かしてみる
 
@@ -128,14 +128,10 @@ STEP 7 で `WATCH_NOTIFY_CHANNEL_ID` を設定してください)
 !help
 ```
 
-```
-!list 行き 8/20
-```
-
-一覧に出てきた便IDを使って監視登録:
+日付を指定して監視登録:
 
 ```
-!watch 行き 8/20 489949
+!watch 行き 8/20
 ```
 
 ---
