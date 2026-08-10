@@ -1,0 +1,47 @@
+name: バス価格監視
+
+on:
+  schedule:
+    # 5分おきに実行(UTC基準。GitHub側の混雑状況により数分遅れることがあります)
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}   # 手動実行用ボタンを表示するため
+
+permissions:
+  contents: write   # data/ フォルダの更新をコミットするために必要
+
+# 前の実行がまだ終わっていない場合は、同時に走らせずに待たせる(データ破損防止)
+concurrency:
+  group: bus-price-bot-monitor
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: リポジトリを取得
+        uses: actions/checkout@v4
+
+      - name: Pythonをセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: ライブラリをインストール
+        run: pip install -r requirements.txt
+
+      - name: 監視スクリプトを実行
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          COMMAND_CHANNEL_ID: ${{ secrets.COMMAND_CHANNEL_ID }}
+          PRICE_LOG_CHANNEL_ID: ${{ secrets.PRICE_LOG_CHANNEL_ID }}
+          TOP5_CHANNEL_ID: ${{ secrets.TOP5_CHANNEL_ID }}
+          WATCH_NOTIFY_CHANNEL_ID: ${{ secrets.WATCH_NOTIFY_CHANNEL_ID }}
+        run: python main.py
+
+      - name: 取得したデータをリポジトリに保存
+        run: |
+          git config user.name "bus-price-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/
+          git diff --cached --quiet || git commit -m "update data $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          git push
