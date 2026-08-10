@@ -9,7 +9,7 @@ on:
 permissions:
   contents: write   # data/ フォルダの更新をコミットするために必要
 
-# 前の実行がまだ終わっていない場合は、同時に走らせずに待たせる(データ破損防止)
+# 前の実行がまだ終わっていない場合は、同時に走らせずに待たせせる(データ破損防止)
 concurrency:
   group: bus-price-bot-monitor
   cancel-in-progress: false
