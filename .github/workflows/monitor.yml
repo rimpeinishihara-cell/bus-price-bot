@@ -3,7 +3,7 @@ name: バス価格監視
 on:
   schedule:
     # 5分おきに実行(UTC基準。GitHub側の混雑状況により数分遅れることがあります)
-    - cron: "*/5 * * * *"
+    - cron: "*/10 * * * *"
   workflow_dispatch: {}   # 手動実行用ボタンを表示するため
 
 permissions:
