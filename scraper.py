@@ -82,8 +82,15 @@ def get_month_calendar(route_slug: str, year: int, month: int) -> dict[str, int]
         if not m:
             continue
         yyyymmdd = m.group(1)
-        text = a.get_text(strip=True)
-        price_m = re.search(r"([\d,]+)\s*円", text)
+
+        # 【重要】このリンクの中には「日付の数字(例:10)」と「価格(例:3,500円)」が
+        # 別々の要素として隙間なく入っている。a.get_text() で丸ごと取ると
+        # "10" + "3,500円" が "103,500円" のようにくっついて誤読してしまうため、
+        # "円" を含むテキスト部分だけをピンポイントで取り出す。
+        price_node = a.find(string=re.compile("円"))
+        if not price_node:
+            continue
+        price_m = re.search(r"([\d,]+)\s*円", price_node)
         if not price_m:
             continue
         price = int(price_m.group(1).replace(",", ""))
