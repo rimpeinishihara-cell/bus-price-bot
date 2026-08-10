@@ -2,11 +2,10 @@
 コマンド用チャンネルに投稿されたメッセージを解釈して実行する。
 
 対応コマンド:
-  !help                                   … コマンド一覧を表示
-  !list <行き|帰り> <日付>                 … その日の便一覧と便IDを表示
-  !watch <行き|帰り> <日付> <便ID>         … その便の価格変更監視を開始
-  !unwatch <行き|帰り> <日付> <便ID>       … 監視を解除
-  !watches                                … 現在の監視一覧を表示
+  !help                      … コマンド一覧を表示
+  !watch <行き|帰り> <日付>   … その日の最安値の変更監視を開始
+  !unwatch <行き|帰り> <日付> … 監視を解除
+  !watches                   … 現在の監視一覧を表示
 
 日付は "2026-08-15" か "8/15" の形式で入力できる。
 """
@@ -23,15 +22,11 @@ HELP_TEXT = """\
 `!help`
   この一覧を表示します
 
-`!list 行き 8/15`
-  8/15の「京都→東京」の便を一覧表示します(便IDつき)
+`!watch 行き 8/15`
+  8/15の「京都→東京」の最安値の変更監視を開始します
   行きの代わりに「帰り」で東京→京都になります
 
-`!watch 行き 8/15 489949`
-  8/15の京都→東京・便ID 489949 の価格変更監視を開始します
-  (便IDは !list で確認してください)
-
-`!unwatch 行き 8/15 489949`
+`!unwatch 行き 8/15`
   上記の監視を解除します
 
 `!watches`
@@ -39,9 +34,9 @@ HELP_TEXT = """\
 
 ---
 別チャンネルでは以下を自動投稿しています:
-・両便の安い日TOP5(1日1回)
-・両便の最安値が変わった時の変更ログ(自動)
-・監視登録した便の価格が変わった時の通知(自動・変更履歴つき)
+・両便の安い日TOP5(価格チェックのたび)
+・両便の最安値が変わった時の変更ログ(自動・30日分すべて対象)
+・監視登録した日の最安値が変わった時の通知(自動・変更履歴つき)
 """
 
 DIRECTION_ALIASES = {
@@ -96,116 +91,82 @@ def handle_command(content: str) -> str | None:
 
     if cmd == "help":
         return HELP_TEXT
-
-    if cmd == "list":
-        return _cmd_list(args)
-
     if cmd == "watch":
         return _cmd_watch(args)
-
     if cmd == "unwatch":
         return _cmd_unwatch(args)
-
     if cmd == "watches":
         return _cmd_watches()
 
     return f"❓ 知らないコマンドです: `!{cmd}`\n`!help` でコマンド一覧を見られます。"
 
 
-def _cmd_list(args: list[str]) -> str:
-    if len(args) < 2:
-        return "使い方: `!list 行き 8/15`"
-    direction = DIRECTION_ALIASES.get(args[0])
-    if not direction:
-        return "1つ目は「行き」か「帰り」を指定してください。"
-    date_str = parse_date(args[1])
-    if not date_str:
-        return "日付の形式が正しくありません。例: `8/15` または `2026-08-15`"
-
-    buses = scraper.get_day_detail(direction, date_str)
-    if not buses:
-        return f"{scraper.ROUTE_LABELS[direction]} {date_str} の便情報が取得できませんでした。"
-
-    buses.sort(key=lambda b: b["price_min"])
-    lines = [f"**{scraper.ROUTE_LABELS[direction]} {date_str} の便一覧**(安い順・上位20件)"]
-    for b in buses[:20]:
-        price_range = _fmt_yen(b["price_min"])
-        if b.get("price_max") and b["price_max"] != b["price_min"]:
-            price_range += f"〜{_fmt_yen(b['price_max'])}"
-        lines.append(f"・`{b['bus_id']}` {b['name']} — {price_range}")
-    lines.append("\n監視するには: `!watch 行き/帰り 日付 便ID`")
-    return "\n".join(lines)
-
-
-def _watch_key(direction: str, date_str: str, bus_id: str) -> str:
-    return f"{direction}:{date_str}:{bus_id}"
+def _watch_key(direction: str, date_str: str) -> str:
+    return f"{direction}:{date_str}"
 
 
 def _cmd_watch(args: list[str]) -> str:
-    if len(args) < 3:
-        return "使い方: `!watch 行き 8/15 489949`"
+    if len(args) < 2:
+        return "使い方: `!watch 行き 8/15`"
     direction = DIRECTION_ALIASES.get(args[0])
     if not direction:
         return "1つ目は「行き」か「帰り」を指定してください。"
     date_str = parse_date(args[1])
     if not date_str:
         return "日付の形式が正しくありません。例: `8/15` または `2026-08-15`"
-    bus_id = args[2]
 
-    bus = scraper.find_bus_by_id(direction, date_str, bus_id)
-    if not bus:
-        return (
-            f"便ID `{bus_id}` が {scraper.ROUTE_LABELS[direction]} {date_str} で見つかりません。"
-            f"`!list {args[0]} {args[1]}` で便IDを確認してください。"
-        )
-
+    key = _watch_key(direction, date_str)
     watches = storage.load("watch_list.json", [])
-    key = _watch_key(direction, date_str, bus_id)
-    if any(_watch_key(w["route"], w["date"], w["bus_id"]) == key for w in watches):
+    if any(w["id"] == key for w in watches):
         return "すでに監視登録されています。"
+
+    prices = scraper.get_prices_for_dates(direction, [date_str])
+    current_price = prices.get(date_str)
+    if current_price is None:
+        return (
+            f"{scraper.ROUTE_LABELS[direction]} {date_str} の価格が取得できませんでした。"
+            f"日付が正しいか確認してください。"
+        )
 
     watches.append({
         "id": key,
         "route": direction,
         "date": date_str,
-        "bus_id": bus_id,
-        "bus_name": bus["name"],
         "created_at": datetime.utcnow().isoformat(),
     })
     storage.save("watch_list.json", watches)
 
-    prices = storage.load("watch_prices.json", {})
-    prices[key] = [{"timestamp": datetime.utcnow().isoformat(), "price": bus["price_min"]}]
-    storage.save("watch_prices.json", prices)
+    watch_prices = storage.load("watch_prices.json", {})
+    watch_prices[key] = [{"timestamp": datetime.utcnow().isoformat(), "price": current_price}]
+    storage.save("watch_prices.json", watch_prices)
 
     return (
         f"✅ 監視を開始しました\n"
-        f"{scraper.ROUTE_LABELS[direction]} {date_str} 「{bus['name']}」\n"
-        f"現在価格: {_fmt_yen(bus['price_min'])}"
+        f"{scraper.ROUTE_LABELS[direction]} {date_str}\n"
+        f"現在の最安値: {_fmt_yen(current_price)}"
     )
 
 
 def _cmd_unwatch(args: list[str]) -> str:
-    if len(args) < 3:
-        return "使い方: `!unwatch 行き 8/15 489949`"
+    if len(args) < 2:
+        return "使い方: `!unwatch 行き 8/15`"
     direction = DIRECTION_ALIASES.get(args[0])
     if not direction:
         return "1つ目は「行き」か「帰り」を指定してください。"
     date_str = parse_date(args[1])
     if not date_str:
         return "日付の形式が正しくありません。"
-    bus_id = args[2]
-    key = _watch_key(direction, date_str, bus_id)
+    key = _watch_key(direction, date_str)
 
     watches = storage.load("watch_list.json", [])
-    new_watches = [w for w in watches if _watch_key(w["route"], w["date"], w["bus_id"]) != key]
+    new_watches = [w for w in watches if w["id"] != key]
     if len(new_watches) == len(watches):
         return "該当する監視登録が見つかりませんでした。"
     storage.save("watch_list.json", new_watches)
 
-    prices = storage.load("watch_prices.json", {})
-    prices.pop(key, None)
-    storage.save("watch_prices.json", prices)
+    watch_prices = storage.load("watch_prices.json", {})
+    watch_prices.pop(key, None)
+    storage.save("watch_prices.json", watch_prices)
 
     return "🗑️ 監視を解除しました。"
 
@@ -215,9 +176,6 @@ def _cmd_watches() -> str:
     if not watches:
         return "現在、監視登録はありません。"
     lines = ["**現在の監視一覧**"]
-    for w in watches:
-        lines.append(
-            f"・`{w['route']}` {scraper.ROUTE_LABELS[w['route']]} {w['date']} "
-            f"「{w['bus_name']}」 便ID:`{w['bus_id']}`"
-        )
+    for w in sorted(watches, key=lambda w: (w["route"], w["date"])):
+        lines.append(f"・{scraper.ROUTE_LABELS[w['route']]} {w['date']}")
     return "\n".join(lines)
