@@ -190,7 +190,7 @@ def main():
     command_channel = os.environ["COMMAND_CHANNEL_ID"]
     price_log_channel = os.environ["PRICE_LOG_CHANNEL_ID"]
     top5_channel = os.environ["TOP5_CHANNEL_ID"]
-    watch_notify_channel = os.environ.get("WATCH_NOTIFY_CHANNEL_ID", command_channel)
+    `watch_notify_channel = os.environ.get("WATCH_NOTIFY_CHANNEL_ID") or command_channel`
 
     client = DiscordClient(token)
 
